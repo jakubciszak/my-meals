@@ -154,6 +154,11 @@ export default function MealsPage() {
                               minute: '2-digit',
                             })}
                           </p>
+                          {meal.ingredients && meal.ingredients.length > 0 && (
+                            <p className="text-sm text-gray-500">
+                              Skladniki: {meal.ingredients.join(', ')}
+                            </p>
+                          )}
                           <MealRatingSummary meal={meal} members={members} />
                         </div>
                         <button

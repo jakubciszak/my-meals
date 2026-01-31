@@ -78,10 +78,34 @@ function MealRatingButtons({ meal, member, onRate }: MealRatingButtonsProps) {
 
 export default function HomePage() {
   const [mealInput, setMealInput] = useState('')
-  const { addMeal, getTodaysMeals, deleteMeal, updateMealRating, isLoading } = useMeals()
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [ingredientsInput, setIngredientsInput] = useState('')
+  const [showIngredients, setShowIngredients] = useState(false)
+  const { addMeal, getMealsByDate, deleteMeal, updateMealRating, isLoading } = useMeals()
   const { members, isLoading: membersLoading } = useFamilyMembers()
 
-  const todaysMeals = getTodaysMeals()
+  const todayStr = new Date().toISOString().split('T')[0]
+  const isToday = selectedDate === todayStr
+  const selectedMeals = getMealsByDate(selectedDate)
+
+  const formatDateHeader = (dateStr: string) => {
+    const date = new Date(dateStr + 'T12:00:00')
+    const today = new Date()
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+
+    if (dateStr === today.toISOString().split('T')[0]) {
+      return 'Dzisiaj'
+    } else if (dateStr === yesterday.toISOString().split('T')[0]) {
+      return 'Wczoraj'
+    } else {
+      return date.toLocaleDateString('pl-PL', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+      })
+    }
+  }
 
   const today = new Date().toLocaleDateString('pl-PL', {
     weekday: 'long',
@@ -91,8 +115,14 @@ export default function HomePage() {
 
   const handleAddMeal = () => {
     if (!mealInput.trim()) return
-    addMeal(mealInput)
+    const ingredients = ingredientsInput
+      .split(',')
+      .map(i => i.trim())
+      .filter(i => i.length > 0)
+    addMeal(mealInput, selectedDate, ingredients)
     setMealInput('')
+    setIngredientsInput('')
+    setShowIngredients(false)
   }
 
   const handleDeleteMeal = (id: string) => {
@@ -113,38 +143,88 @@ export default function HomePage() {
       <section className="mb-6">
         <div className="card">
           <h2 className="text-lg font-semibold mb-3">Dodaj obiad</h2>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={mealInput}
-              onChange={(e) => setMealInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddMeal()}
-              placeholder="Co bylo na obiad?"
-              className="input flex-1"
-              aria-label="Nazwa obiadu"
-            />
-            <button
-              onClick={handleAddMeal}
-              className="btn-primary"
-              aria-label="Dodaj obiad"
-            >
-              Dodaj
-            </button>
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={mealInput}
+                onChange={(e) => setMealInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !showIngredients && handleAddMeal()}
+                placeholder="Co bylo na obiad?"
+                className="input flex-1"
+                aria-label="Nazwa obiadu"
+              />
+              <button
+                onClick={handleAddMeal}
+                className="btn-primary"
+                aria-label="Dodaj obiad"
+              >
+                Dodaj
+              </button>
+            </div>
+            <div className="flex gap-2 items-center">
+              <label className="text-sm text-gray-600">Data:</label>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                max={todayStr}
+                className="input flex-1"
+                aria-label="Data obiadu"
+              />
+              {!isToday && (
+                <button
+                  onClick={() => setSelectedDate(todayStr)}
+                  className="text-sm text-primary hover:underline"
+                >
+                  Dzisiaj
+                </button>
+              )}
+            </div>
+            <div>
+              <button
+                onClick={() => setShowIngredients(!showIngredients)}
+                className="text-sm text-gray-600 hover:text-primary flex items-center gap-1"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className={`h-4 w-4 transition-transform ${showIngredients ? 'rotate-90' : ''}`}
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                </svg>
+                Dodaj skladniki (opcjonalnie)
+              </button>
+              {showIngredients && (
+                <input
+                  type="text"
+                  value={ingredientsInput}
+                  onChange={(e) => setIngredientsInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddMeal()}
+                  placeholder="np. kurczak, ryz, warzywa"
+                  className="input w-full mt-2"
+                  aria-label="Skladniki obiadu"
+                />
+              )}
+            </div>
           </div>
         </div>
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold mb-3">Dzisiejsze posilki</h2>
+        <h2 className="text-lg font-semibold mb-3">
+          Posilki: {formatDateHeader(selectedDate)}
+        </h2>
         <div className="space-y-3">
           {isLoading || membersLoading ? (
             <p className="text-gray-500 text-center py-8">Ladowanie...</p>
-          ) : todaysMeals.length === 0 ? (
+          ) : selectedMeals.length === 0 ? (
             <p className="text-gray-500 text-center py-8">
-              Brak obiadow na dzis. Dodaj pierwszy!
+              Brak obiadow na {isToday ? 'dzis' : 'ten dzien'}. Dodaj pierwszy!
             </p>
           ) : (
-            todaysMeals.map((meal) => (
+            selectedMeals.map((meal) => (
               <div key={meal.id} className="card">
                 <div className="flex items-start justify-between mb-3">
                   <div>
@@ -155,6 +235,11 @@ export default function HomePage() {
                         minute: '2-digit',
                       })}
                     </p>
+                    {meal.ingredients && meal.ingredients.length > 0 && (
+                      <p className="text-sm text-gray-500 mt-1">
+                        Skladniki: {meal.ingredients.join(', ')}
+                      </p>
+                    )}
                   </div>
                   <button
                     onClick={() => handleDeleteMeal(meal.id)}

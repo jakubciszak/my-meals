@@ -29,7 +29,7 @@ export function useMeals() {
     }
   }, [meals, isLoading])
 
-  const addMeal = useCallback((name: string, date?: string) => {
+  const addMeal = useCallback((name: string, date?: string, ingredients?: string[]) => {
     const now = new Date().toISOString()
     const mealDate = date || now.split('T')[0]
 
@@ -38,6 +38,7 @@ export function useMeals() {
       name: name.trim(),
       date: mealDate,
       ratings: [],
+      ingredients: ingredients && ingredients.length > 0 ? ingredients : undefined,
       createdAt: now,
       updatedAt: now,
     }
