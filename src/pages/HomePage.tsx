@@ -81,12 +81,55 @@ export default function HomePage() {
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0])
   const [ingredientsInput, setIngredientsInput] = useState('')
   const [showIngredients, setShowIngredients] = useState(false)
-  const { addMeal, getMealsByDate, deleteMeal, updateMealRating, isLoading } = useMeals()
+  const [filterMemberId, setFilterMemberId] = useState<string>('')
+  const [filterIngredient, setFilterIngredient] = useState<string>('')
+  const { addMeal, getMealsByDate, deleteMeal, updateMealRating, isLoading, meals } = useMeals()
   const { members, isLoading: membersLoading } = useFamilyMembers()
 
   const todayStr = new Date().toISOString().split('T')[0]
   const isToday = selectedDate === todayStr
-  const selectedMeals = getMealsByDate(selectedDate)
+
+  // Get all unique ingredients from all meals for filter dropdown
+  const allIngredients = [...new Set(
+    meals
+      .flatMap(meal => meal.ingredients || [])
+      .filter(i => i.length > 0)
+  )].sort()
+
+  // Filter meals by date, member rating, and ingredient
+  const selectedMeals = getMealsByDate(selectedDate).filter(meal => {
+    // Filter by member who liked
+    if (filterMemberId) {
+      const hasLikedRating = meal.ratings.some(
+        r => r.memberId === filterMemberId && r.liked === true
+      )
+      if (!hasLikedRating) return false
+    }
+    // Filter by ingredient
+    if (filterIngredient) {
+      const hasIngredient = meal.ingredients?.some(
+        i => i.toLowerCase().includes(filterIngredient.toLowerCase())
+      )
+      if (!hasIngredient) return false
+    }
+    return true
+  })
+
+  const goToPreviousDay = () => {
+    const date = new Date(selectedDate + 'T12:00:00')
+    date.setDate(date.getDate() - 1)
+    setSelectedDate(date.toISOString().split('T')[0])
+  }
+
+  const goToNextDay = () => {
+    const date = new Date(selectedDate + 'T12:00:00')
+    date.setDate(date.getDate() + 1)
+    const nextDate = date.toISOString().split('T')[0]
+    // Don't go past today
+    if (nextDate <= todayStr) {
+      setSelectedDate(nextDate)
+    }
+  }
 
   const formatDateHeader = (dateStr: string) => {
     const date = new Date(dateStr + 'T12:00:00')
@@ -213,9 +256,72 @@ export default function HomePage() {
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold mb-3">
-          Posilki: {formatDateHeader(selectedDate)}
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <button
+            onClick={goToPreviousDay}
+            className="btn-ghost p-2"
+            aria-label="Poprzedni dzien"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+          </button>
+          <h2 className="text-lg font-semibold">
+            Posilki: {formatDateHeader(selectedDate)}
+          </h2>
+          <button
+            onClick={goToNextDay}
+            disabled={isToday}
+            className={`btn-ghost p-2 ${isToday ? 'opacity-30 cursor-not-allowed' : ''}`}
+            aria-label="Nastepny dzien"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="flex gap-2 mb-3 flex-wrap">
+          <select
+            value={filterMemberId}
+            onChange={(e) => setFilterMemberId(e.target.value)}
+            className="input text-sm py-1.5"
+            aria-label="Filtruj po osobie"
+          >
+            <option value="">Wszystkie osoby</option>
+            {members.map(member => (
+              <option key={member.id} value={member.id}>
+                Polubione przez: {member.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filterIngredient}
+            onChange={(e) => setFilterIngredient(e.target.value)}
+            className="input text-sm py-1.5"
+            aria-label="Filtruj po skladniku"
+          >
+            <option value="">Wszystkie skladniki</option>
+            {allIngredients.map(ingredient => (
+              <option key={ingredient} value={ingredient}>
+                {ingredient}
+              </option>
+            ))}
+          </select>
+          {(filterMemberId || filterIngredient) && (
+            <button
+              onClick={() => {
+                setFilterMemberId('')
+                setFilterIngredient('')
+              }}
+              className="text-sm text-primary hover:underline"
+            >
+              Wyczysc filtry
+            </button>
+          )}
+        </div>
+
         <div className="space-y-3">
           {isLoading || membersLoading ? (
             <p className="text-gray-500 text-center py-8">Ladowanie...</p>
@@ -236,9 +342,16 @@ export default function HomePage() {
                       })}
                     </p>
                     {meal.ingredients && meal.ingredients.length > 0 && (
-                      <p className="text-sm text-gray-500 mt-1">
-                        Skladniki: {meal.ingredients.join(', ')}
-                      </p>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {meal.ingredients.map((ingredient, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full"
+                          >
+                            {ingredient}
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </div>
                   <button
