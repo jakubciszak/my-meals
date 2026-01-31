@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import type { Meal } from '../types'
+import type { Meal, MealRating } from '../types'
 
 const STORAGE_KEY = 'my-meals-data'
 
@@ -80,6 +80,40 @@ export function useMeals() {
     }))
   }, [meals])
 
+  const updateMealRating = useCallback((mealId: string, memberId: string, liked: boolean | null) => {
+    setMeals(prev => prev.map(meal => {
+      if (meal.id !== mealId) return meal
+
+      const now = new Date().toISOString()
+      let newRatings: MealRating[]
+
+      if (liked === null) {
+        // Remove rating
+        newRatings = meal.ratings.filter(r => r.memberId !== memberId)
+      } else {
+        const existingRatingIndex = meal.ratings.findIndex(r => r.memberId === memberId)
+        if (existingRatingIndex >= 0) {
+          // Update existing rating
+          newRatings = [...meal.ratings]
+          newRatings[existingRatingIndex] = { memberId, liked }
+        } else {
+          // Add new rating
+          newRatings = [...meal.ratings, { memberId, liked }]
+        }
+      }
+
+      return {
+        ...meal,
+        ratings: newRatings,
+        updatedAt: now,
+      }
+    }))
+  }, [])
+
+  const getMealById = useCallback((id: string) => {
+    return meals.find(meal => meal.id === id)
+  }, [meals])
+
   return {
     meals,
     isLoading,
@@ -88,5 +122,7 @@ export function useMeals() {
     getMealsByDate,
     getTodaysMeals,
     getMealsGroupedByDate,
+    updateMealRating,
+    getMealById,
   }
 }
