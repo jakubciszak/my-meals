@@ -1,0 +1,167 @@
+# My Meals - Instrukcje dla Claude
+
+## O projekcie
+
+My Meals to aplikacja webowa do planowania i śledzenia obiadów dla całej rodziny.
+Aplikacja działa w pełni po stronie klienta (bez backendu) z możliwością synchronizacji z Google Drive i Google Calendar.
+
+## Stack technologiczny
+
+- **Framework:** React 18 z TypeScript
+- **Bundler:** Vite
+- **Style:** Tailwind CSS (mobile-first)
+- **Routing:** React Router DOM v6
+- **Testy:** Vitest + React Testing Library
+- **CI/CD:** GitHub Actions
+- **Hosting:** GitHub Pages
+
+## Struktura projektu
+
+```
+src/
+├── components/     # Komponenty UI wielokrotnego użytku
+├── pages/          # Strony aplikacji (routing)
+├── hooks/          # Custom React hooks
+├── services/       # Logika biznesowa (storage, sync, API)
+├── types/          # TypeScript types/interfaces
+├── test/           # Konfiguracja i utilities testowe
+└── App.tsx         # Główny komponent aplikacji
+```
+
+## Zasady rozwoju
+
+### TDD (Test-Driven Development)
+
+1. **ZAWSZE** pisz testy PRZED implementacją
+2. Cykl: RED → GREEN → REFACTOR
+3. Każda nowa funkcjonalność musi mieć testy
+4. Uruchom testy przed commitem: `npm test`
+
+### Mobile-First
+
+1. Projektuj najpierw dla urządzeń mobilnych
+2. Używaj Tailwind breakpoints: `sm:`, `md:`, `lg:` dla większych ekranów
+3. Dbaj o dostępność (aria-labels, keyboard navigation)
+4. Testuj na różnych rozmiarach ekranu
+
+### Konwencje kodu
+
+1. **Komponenty:** PascalCase, jeden komponent = jeden plik
+2. **Hooki:** camelCase, prefix `use`
+3. **Testy:** `*.test.tsx` obok testowanego pliku
+4. **Types:** Definiuj w `src/types/index.ts`
+
+### Git workflow
+
+1. Feature branches: `feature/nazwa-funkcji`
+2. Bug fixes: `fix/opis-buga`
+3. Commity: konwencjonalne (feat:, fix:, test:, refactor:, docs:)
+4. PR musi przejść CI (testy + lint)
+
+## Główne funkcjonalności do implementacji
+
+### 1. Zarządzanie obiadami
+- [ ] Dodawanie obiadu (tekst + dyktowanie)
+- [ ] Lista obiadów z danego dnia
+- [ ] Historia obiadów (kalendarz)
+- [ ] Edycja i usuwanie obiadów
+
+### 2. System ocen rodzinnych
+- [ ] Dodawanie członków rodziny
+- [ ] Ocenianie obiadu (lubi/nie lubi)
+- [ ] Widok preferencji na liście
+
+### 3. Propozycje obiadów
+- [ ] Algorytm bazujący na historii
+- [ ] Uwzględnienie preferencji rodziny
+- [ ] Sortowanie wg czasu od ostatniego
+
+### 4. Składniki (opcjonalne)
+- [ ] Dodawanie składników do obiadu
+- [ ] Wyszukiwanie po składnikach
+
+### 5. Synchronizacja
+- [ ] LocalStorage jako domyślne
+- [ ] Google Drive sync
+- [ ] Google Calendar integration
+
+## Przydatne komendy
+
+```bash
+npm run dev        # Uruchom dev server
+npm run build      # Zbuduj produkcję
+npm run test       # Uruchom testy (watch mode)
+npm run test:ci    # Uruchom testy z coverage
+npm run lint       # Sprawdź kod linterem
+```
+
+## Modele danych
+
+### Meal (Obiad)
+```typescript
+interface Meal {
+  id: string
+  name: string
+  date: string           // YYYY-MM-DD
+  ratings: MealRating[]  // Kto lubi/nie lubi
+  ingredients?: string[]
+  notes?: string
+  createdAt: string
+  updatedAt: string
+}
+```
+
+### FamilyMember (Członek rodziny)
+```typescript
+interface FamilyMember {
+  id: string
+  name: string
+  avatar?: string
+  createdAt: string
+}
+```
+
+### MealRating (Ocena obiadu)
+```typescript
+interface MealRating {
+  memberId: string
+  liked: boolean
+}
+```
+
+## Wskazówki dla Claude
+
+1. Zawsze sprawdź istniejące testy przed modyfikacją kodu
+2. Dodaj testy dla każdej nowej funkcji
+3. Używaj `src/test/test-utils.tsx` do renderowania komponentów
+4. Pamiętaj o responsywności (mobile-first)
+5. Nie dodawaj zależności bez uzasadnienia
+6. Trzymaj komponenty małe i skomponowane
+7. Preferuj hooki do logiki stanowej
+8. Używaj TypeScript strict mode
+
+## API przeglądarki
+
+### LocalStorage
+```typescript
+// Klucze storage
+const STORAGE_KEYS = {
+  MEALS: 'my-meals:meals',
+  FAMILY: 'my-meals:family',
+  SETTINGS: 'my-meals:settings',
+}
+```
+
+### Web Speech API (dyktowanie)
+```typescript
+// Sprawdź wsparcie
+const isSupported = 'webkitSpeechRecognition' in window
+```
+
+## Linki
+
+- [Vite](https://vitejs.dev/)
+- [React](https://react.dev/)
+- [Tailwind CSS](https://tailwindcss.com/)
+- [Vitest](https://vitest.dev/)
+- [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/)
