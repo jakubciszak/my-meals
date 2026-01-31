@@ -18,7 +18,7 @@ describe('App', () => {
 
   it('renders meal input field', () => {
     render(<App />)
-    expect(screen.getByPlaceholderText('Co było na obiad?')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Co bylo na obiad?')).toBeInTheDocument()
   })
 
   it('renders add meal button', () => {
