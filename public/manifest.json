@@ -1,0 +1,20 @@
+{
+  "name": "My Meals - Planowanie obiadów",
+  "short_name": "My Meals",
+  "description": "Aplikacja do planowania obiadów dla całej rodziny",
+  "start_url": "/my-meals/",
+  "display": "standalone",
+  "background_color": "#fef7ee",
+  "theme_color": "#ee751a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/my-meals/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "lang": "pl",
+  "categories": ["food", "lifestyle"]
+}
