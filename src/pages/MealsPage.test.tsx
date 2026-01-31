@@ -339,4 +339,41 @@ describe('MealsPage', () => {
       expect(screen.queryByTestId('likes-summary')).not.toBeInTheDocument()
     })
   })
+
+  describe('CSV export', () => {
+    it('does not show export button when no meals', async () => {
+      render(<MealsPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Brak zapisanych obiadow.')).toBeInTheDocument()
+      })
+
+      expect(screen.queryByRole('button', { name: /eksportuj/i })).not.toBeInTheDocument()
+    })
+
+    it('shows export button when meals exist', async () => {
+      const today = new Date().toISOString().split('T')[0]
+      const storedMeals = {
+        meals: [
+          {
+            id: 'meal-1',
+            name: 'TestMeal',
+            date: today,
+            ratings: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      }
+      localStorage.setItem('my-meals-data', JSON.stringify(storedMeals))
+
+      render(<MealsPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText('TestMeal')).toBeInTheDocument()
+      })
+
+      expect(screen.getByRole('button', { name: /eksportuj/i })).toBeInTheDocument()
+    })
+  })
 })

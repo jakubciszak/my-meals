@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import type { Meal, MealRating } from '../types'
+import type { Meal, MealRating, FamilyMember } from '../types'
 
 const STORAGE_KEY = 'my-meals-data'
 
@@ -114,6 +114,56 @@ export function useMeals() {
     return meals.find(meal => meal.id === id)
   }, [meals])
 
+  const exportToCSV = useCallback((familyMembers: FamilyMember[]) => {
+    if (meals.length === 0) {
+      return
+    }
+
+    const getMemberName = (memberId: string) => {
+      const member = familyMembers.find(m => m.id === memberId)
+      return member?.name || 'Nieznany'
+    }
+
+    const escapeCSV = (value: string) => {
+      if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+        return `"${value.replace(/"/g, '""')}"`
+      }
+      return value
+    }
+
+    const headers = ['Data', 'Godzina', 'Nazwa posilku', 'Polubili', 'Nie polubili']
+    const rows = meals
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .map(meal => {
+        const date = meal.date
+        const time = new Date(meal.createdAt).toLocaleTimeString('pl-PL', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+        const likes = meal.ratings
+          .filter(r => r.liked)
+          .map(r => getMemberName(r.memberId))
+          .join(', ')
+        const dislikes = meal.ratings
+          .filter(r => !r.liked)
+          .map(r => getMemberName(r.memberId))
+          .join(', ')
+
+        return [date, time, meal.name, likes, dislikes].map(escapeCSV).join(',')
+      })
+
+    const csvContent = [headers.join(','), ...rows].join('\n')
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `historia-obiadow-${new Date().toISOString().split('T')[0]}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }, [meals])
+
   return {
     meals,
     isLoading,
@@ -124,5 +174,6 @@ export function useMeals() {
     getMealsGroupedByDate,
     updateMealRating,
     getMealById,
+    exportToCSV,
   }
 }

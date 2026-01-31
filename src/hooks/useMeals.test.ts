@@ -286,4 +286,16 @@ describe('useMeals', () => {
       expect(result.current.meals[0].ratings).toHaveLength(1)
     })
   })
+
+  describe('exportToCSV', () => {
+    it('returns exportToCSV function', async () => {
+      const { result } = renderHook(() => useMeals())
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      expect(typeof result.current.exportToCSV).toBe('function')
+    })
+  })
 })
