@@ -32,12 +32,34 @@ export function useMeals() {
   const addMeal = useCallback((name: string, date?: string, ingredients?: string[]) => {
     const now = new Date().toISOString()
     const mealDate = date || now.split('T')[0]
+    const trimmedName = name.trim()
+    const normalizedName = trimmedName.toLowerCase()
+
+    // Find existing preferences for this dish from previous entries
+    const existingPreferences: MealRating[] = []
+    const preferencesMap = new Map<string, MealRating>()
+
+    // Get all meals with this name, sorted by date (newest first)
+    const matchingMeals = meals
+      .filter(meal => meal.name.toLowerCase() === normalizedName)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+    // Aggregate preferences - take the most recent one for each member
+    for (const meal of matchingMeals) {
+      for (const rating of meal.ratings) {
+        if (!preferencesMap.has(rating.memberId)) {
+          preferencesMap.set(rating.memberId, { ...rating })
+        }
+      }
+    }
+
+    preferencesMap.forEach(rating => existingPreferences.push(rating))
 
     const newMeal: Meal = {
       id: uuidv4(),
-      name: name.trim(),
+      name: trimmedName,
       date: mealDate,
-      ratings: [],
+      ratings: existingPreferences,
       ingredients: ingredients && ingredients.length > 0 ? ingredients : undefined,
       createdAt: now,
       updatedAt: now,
@@ -45,7 +67,7 @@ export function useMeals() {
 
     setMeals(prev => [newMeal, ...prev])
     return newMeal
-  }, [])
+  }, [meals])
 
   const deleteMeal = useCallback((id: string) => {
     setMeals(prev => prev.filter(meal => meal.id !== id))
@@ -115,6 +137,40 @@ export function useMeals() {
     return meals.find(meal => meal.id === id)
   }, [meals])
 
+  // Get all unique meal names for autocomplete
+  const getUniqueMealNames = useCallback(() => {
+    const names = meals.map(meal => meal.name)
+    return [...new Set(names)].sort((a, b) =>
+      a.toLowerCase().localeCompare(b.toLowerCase(), 'pl')
+    )
+  }, [meals])
+
+  // Get aggregated preferences for a dish by name
+  // Returns the most recent preference for each member
+  const getPreferencesForDish = useCallback((dishName: string): MealRating[] => {
+    const normalizedName = dishName.trim().toLowerCase()
+
+    // Get all meals with this name, sorted by date (newest first)
+    const matchingMeals = meals
+      .filter(meal => meal.name.toLowerCase() === normalizedName)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+    if (matchingMeals.length === 0) return []
+
+    // Aggregate preferences - take the most recent one for each member
+    const preferencesMap = new Map<string, MealRating>()
+
+    for (const meal of matchingMeals) {
+      for (const rating of meal.ratings) {
+        if (!preferencesMap.has(rating.memberId)) {
+          preferencesMap.set(rating.memberId, { ...rating })
+        }
+      }
+    }
+
+    return Array.from(preferencesMap.values())
+  }, [meals])
+
   const exportToCSV = useCallback((familyMembers: FamilyMember[]) => {
     if (meals.length === 0) {
       return
@@ -176,5 +232,7 @@ export function useMeals() {
     updateMealRating,
     getMealById,
     exportToCSV,
+    getUniqueMealNames,
+    getPreferencesForDish,
   }
 }

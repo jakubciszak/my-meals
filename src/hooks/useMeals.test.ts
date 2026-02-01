@@ -298,4 +298,216 @@ describe('useMeals', () => {
       expect(typeof result.current.exportToCSV).toBe('function')
     })
   })
+
+  describe('getUniqueMealNames', () => {
+    it('returns empty array when no meals exist', async () => {
+      const { result } = renderHook(() => useMeals())
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      expect(result.current.getUniqueMealNames()).toEqual([])
+    })
+
+    it('returns unique meal names sorted alphabetically', async () => {
+      const { result } = renderHook(() => useMeals())
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      act(() => {
+        result.current.addMeal('Zupa')
+        result.current.addMeal('Kotlet')
+        result.current.addMeal('Zupa')
+        result.current.addMeal('Pierogi')
+      })
+
+      const names = result.current.getUniqueMealNames()
+      expect(names).toEqual(['Kotlet', 'Pierogi', 'Zupa'])
+    })
+  })
+
+  describe('getPreferencesForDish', () => {
+    it('returns empty array for unknown dish', async () => {
+      const { result } = renderHook(() => useMeals())
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      expect(result.current.getPreferencesForDish('Unknown')).toEqual([])
+    })
+
+    it('returns aggregated preferences for a dish', async () => {
+      const { result } = renderHook(() => useMeals())
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      let mealId = ''
+      act(() => {
+        const meal = result.current.addMeal('Schabowy')
+        mealId = meal.id
+      })
+
+      act(() => {
+        result.current.updateMealRating(mealId, 'member-1', true)
+        result.current.updateMealRating(mealId, 'member-2', false)
+      })
+
+      const prefs = result.current.getPreferencesForDish('Schabowy')
+      expect(prefs).toHaveLength(2)
+      expect(prefs).toContainEqual({ memberId: 'member-1', liked: true })
+      expect(prefs).toContainEqual({ memberId: 'member-2', liked: false })
+    })
+
+    it('returns case-insensitive matches', async () => {
+      const { result } = renderHook(() => useMeals())
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      let mealId = ''
+      act(() => {
+        const meal = result.current.addMeal('PIZZA')
+        mealId = meal.id
+      })
+
+      act(() => {
+        result.current.updateMealRating(mealId, 'member-1', true)
+      })
+
+      const prefs = result.current.getPreferencesForDish('pizza')
+      expect(prefs).toHaveLength(1)
+      expect(prefs[0]).toEqual({ memberId: 'member-1', liked: true })
+    })
+  })
+
+  describe('automatic preference copying', () => {
+    it('copies preferences from previous meal with same name', async () => {
+      const { result } = renderHook(() => useMeals())
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      // Add first meal and rate it
+      let firstMealId = ''
+      act(() => {
+        const meal = result.current.addMeal('Schabowy')
+        firstMealId = meal.id
+      })
+
+      act(() => {
+        result.current.updateMealRating(firstMealId, 'member-1', true)
+        result.current.updateMealRating(firstMealId, 'member-2', false)
+      })
+
+      // Add second meal with same name
+      let secondMeal: ReturnType<typeof result.current.addMeal> | null = null
+      act(() => {
+        secondMeal = result.current.addMeal('Schabowy')
+      })
+
+      // Second meal should have inherited preferences
+      expect(secondMeal!.ratings).toHaveLength(2)
+      expect(secondMeal!.ratings).toContainEqual({ memberId: 'member-1', liked: true })
+      expect(secondMeal!.ratings).toContainEqual({ memberId: 'member-2', liked: false })
+    })
+
+    it('copies preferences case-insensitively', async () => {
+      const { result } = renderHook(() => useMeals())
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      let firstMealId = ''
+      act(() => {
+        const meal = result.current.addMeal('Pizza')
+        firstMealId = meal.id
+      })
+
+      act(() => {
+        result.current.updateMealRating(firstMealId, 'member-1', true)
+      })
+
+      let secondMeal: ReturnType<typeof result.current.addMeal> | null = null
+      act(() => {
+        secondMeal = result.current.addMeal('PIZZA')
+      })
+
+      expect(secondMeal!.ratings).toHaveLength(1)
+      expect(secondMeal!.ratings[0]).toEqual({ memberId: 'member-1', liked: true })
+    })
+
+    it('uses most recent preferences when multiple meals with same name exist', async () => {
+      const { result } = renderHook(() => useMeals())
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      // Add first meal
+      let firstMealId = ''
+      act(() => {
+        const meal = result.current.addMeal('Zupa')
+        firstMealId = meal.id
+      })
+
+      act(() => {
+        result.current.updateMealRating(firstMealId, 'member-1', true)
+      })
+
+      // Add second meal
+      let secondMealId = ''
+      act(() => {
+        const meal = result.current.addMeal('Zupa')
+        secondMealId = meal.id
+      })
+
+      // Change rating on second meal
+      act(() => {
+        result.current.updateMealRating(secondMealId, 'member-1', false)
+      })
+
+      // Add third meal - should get most recent preference (false)
+      let thirdMeal: ReturnType<typeof result.current.addMeal> | null = null
+      act(() => {
+        thirdMeal = result.current.addMeal('Zupa')
+      })
+
+      expect(thirdMeal!.ratings).toHaveLength(1)
+      expect(thirdMeal!.ratings[0]).toEqual({ memberId: 'member-1', liked: false })
+    })
+
+    it('does not copy preferences for new meal name', async () => {
+      const { result } = renderHook(() => useMeals())
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false)
+      })
+
+      let firstMealId = ''
+      act(() => {
+        const meal = result.current.addMeal('Kotlet')
+        firstMealId = meal.id
+      })
+
+      act(() => {
+        result.current.updateMealRating(firstMealId, 'member-1', true)
+      })
+
+      let newMeal: ReturnType<typeof result.current.addMeal> | null = null
+      act(() => {
+        newMeal = result.current.addMeal('Ryba')
+      })
+
+      expect(newMeal!.ratings).toHaveLength(0)
+    })
+  })
 })

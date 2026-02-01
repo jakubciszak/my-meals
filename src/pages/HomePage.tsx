@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMeals } from '../hooks/useMeals'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
+import { MealAutocomplete } from '../components/MealAutocomplete'
 import type { Meal, FamilyMember } from '../types'
 
 interface MealRatingButtonsProps {
@@ -83,7 +84,7 @@ export default function HomePage() {
   const [showIngredients, setShowIngredients] = useState(false)
   const [filterMemberId, setFilterMemberId] = useState<string>('')
   const [filterIngredient, setFilterIngredient] = useState<string>('')
-  const { addMeal, getMealsByDate, deleteMeal, updateMealRating, isLoading, meals } = useMeals()
+  const { addMeal, getMealsByDate, deleteMeal, updateMealRating, isLoading, meals, getUniqueMealNames } = useMeals()
   const { members, isLoading: membersLoading } = useFamilyMembers()
 
   const todayStr = new Date().toISOString().split('T')[0]
@@ -188,13 +189,13 @@ export default function HomePage() {
           <h2 className="text-lg font-semibold mb-3">Dodaj obiad</h2>
           <div className="space-y-3">
             <div className="flex gap-2">
-              <input
-                type="text"
+              <MealAutocomplete
                 value={mealInput}
-                onChange={(e) => setMealInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !showIngredients && handleAddMeal()}
+                onChange={setMealInput}
+                onSelect={setMealInput}
+                suggestions={getUniqueMealNames()}
                 placeholder="Co bylo na obiad?"
-                className="input flex-1"
+                onKeyDown={(e) => e.key === 'Enter' && !showIngredients && handleAddMeal()}
                 aria-label="Nazwa obiadu"
               />
               <button
