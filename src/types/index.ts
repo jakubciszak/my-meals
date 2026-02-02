@@ -27,4 +27,14 @@ export interface AppState {
   lastSyncedAt?: string
 }
 
+// Preferencje dla konkretnego dania (nazwa dania -> oceny członków rodziny)
+export interface MealPreference {
+  memberId: string
+  liked: boolean
+}
+
+export interface DishPreferences {
+  [dishName: string]: MealPreference[]
+}
+
 export type StorageProvider = 'local' | 'google-drive'
