@@ -1,8 +1,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type { Meal, MealRating, FamilyMember } from '../types'
+import { DATA_CHANGED_EVENT } from './useGoogleSheets'
 
 const STORAGE_KEY = 'my-meals-data'
+
+// Emit event to trigger auto-sync
+const emitDataChanged = () => {
+  window.dispatchEvent(new CustomEvent(DATA_CHANGED_EVENT))
+}
 
 export function useMeals() {
   const [allMeals, setAllMeals] = useState<Meal[]>([])
@@ -29,6 +35,8 @@ export function useMeals() {
   useEffect(() => {
     if (!isLoading) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ meals: allMeals }))
+      // Trigger auto-sync to Google Sheets
+      emitDataChanged()
     }
   }, [allMeals, isLoading])
 

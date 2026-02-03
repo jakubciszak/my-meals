@@ -4,6 +4,12 @@ import type { Meal, FamilyMember } from '../types'
 // Need both scopes: spreadsheets for read/write, drive.readonly to list files
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.readonly'
 
+// Custom event name for data changes
+export const DATA_CHANGED_EVENT = 'my-meals-data-changed'
+
+// Debounce delay for auto-sync (in ms)
+const AUTO_SYNC_DEBOUNCE = 2000
+
 export interface SpreadsheetInfo {
   id: string
   name: string
@@ -647,6 +653,68 @@ export function useGoogleSheets(options?: UseGoogleSheetsOptions) {
 
   const isConfigured = Boolean(clientId)
 
+  // Auto-sync debounce ref
+  const autoSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isAutoSyncingRef = useRef(false)
+
+  // Auto-sync to cloud (debounced, silent - no UI state changes)
+  const autoSyncToCloud = useCallback(async () => {
+    // Skip if not connected, no spreadsheet, or already syncing
+    if (!accessTokenRef.current || !spreadsheetId || isAutoSyncingRef.current) {
+      return
+    }
+
+    isAutoSyncingRef.current = true
+
+    try {
+      const { meals, familyMembers } = getLocalData()
+
+      const mealsRows = mealsToRows(meals)
+      const familyRows = familyToRows(familyMembers)
+
+      await Promise.all([
+        writeSheet(MEALS_SHEET_NAME, mealsRows),
+        writeSheet(FAMILY_SHEET_NAME, familyRows),
+      ])
+
+      const now = new Date().toISOString()
+      setLastSyncedAt(now)
+      localStorage.setItem(LAST_SYNC_KEY, now)
+    } catch (err) {
+      // Silent fail for auto-sync - don't disrupt user experience
+      console.error('Auto-sync failed:', err)
+    } finally {
+      isAutoSyncingRef.current = false
+    }
+  }, [spreadsheetId, getLocalData, mealsToRows, familyToRows, writeSheet])
+
+  // Trigger auto-sync with debounce
+  const triggerAutoSync = useCallback(() => {
+    if (autoSyncTimeoutRef.current) {
+      clearTimeout(autoSyncTimeoutRef.current)
+    }
+
+    autoSyncTimeoutRef.current = setTimeout(() => {
+      autoSyncToCloud()
+    }, AUTO_SYNC_DEBOUNCE)
+  }, [autoSyncToCloud])
+
+  // Listen for data change events and trigger auto-sync
+  useEffect(() => {
+    const handleDataChanged = () => {
+      triggerAutoSync()
+    }
+
+    window.addEventListener(DATA_CHANGED_EVENT, handleDataChanged)
+
+    return () => {
+      window.removeEventListener(DATA_CHANGED_EVENT, handleDataChanged)
+      if (autoSyncTimeoutRef.current) {
+        clearTimeout(autoSyncTimeoutRef.current)
+      }
+    }
+  }, [triggerAutoSync])
+
   return {
     isConnected,
     isLoading,
@@ -665,5 +733,6 @@ export function useGoogleSheets(options?: UseGoogleSheetsOptions) {
     syncToCloud,
     syncFromCloud,
     sync,
+    triggerAutoSync,
   }
 }

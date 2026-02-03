@@ -1,8 +1,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type { FamilyMember } from '../types'
+import { DATA_CHANGED_EVENT } from './useGoogleSheets'
 
 const STORAGE_KEY = 'my-meals-family'
+
+// Emit event to trigger auto-sync
+const emitDataChanged = () => {
+  window.dispatchEvent(new CustomEvent(DATA_CHANGED_EVENT))
+}
 
 export function useFamilyMembers() {
   const [allMembers, setAllMembers] = useState<FamilyMember[]>([])
@@ -29,6 +35,8 @@ export function useFamilyMembers() {
   useEffect(() => {
     if (!isLoading) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ members: allMembers }))
+      // Trigger auto-sync to Google Sheets
+      emitDataChanged()
     }
   }, [allMembers, isLoading])
 
