@@ -1,7 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import type { Meal, FamilyMember } from '../types'
 
-const SCOPES = 'https://www.googleapis.com/auth/spreadsheets'
+// Need both scopes: spreadsheets for read/write, drive.readonly to list files
+const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.readonly'
+
+export interface SpreadsheetInfo {
+  id: string
+  name: string
+}
 
 const ACCESS_TOKEN_KEY = 'my-meals-sheets-token'
 const TOKEN_EXPIRY_KEY = 'my-meals-sheets-token-expiry'
@@ -25,6 +31,8 @@ export function useGoogleSheets(options?: UseGoogleSheetsOptions) {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null)
+  const [spreadsheets, setSpreadsheets] = useState<SpreadsheetInfo[]>([])
+  const [isLoadingSpreadsheets, setIsLoadingSpreadsheets] = useState(false)
 
   const tokenClientRef = useRef<google.accounts.oauth2.TokenClient | null>(null)
   const accessTokenRef = useRef<string | null>(null)
@@ -132,6 +140,94 @@ export function useGoogleSheets(options?: UseGoogleSheetsOptions) {
       localStorage.removeItem(SPREADSHEET_ID_KEY)
     }
   }, [])
+
+  // List user's Google Spreadsheets
+  const listSpreadsheets = useCallback(async () => {
+    if (!accessTokenRef.current) {
+      return
+    }
+
+    setIsLoadingSpreadsheets(true)
+    setError(null)
+
+    try {
+      const response = await fetch(
+        "https://www.googleapis.com/drive/v3/files?q=mimeType='application/vnd.google-apps.spreadsheet' and trashed=false&orderBy=modifiedTime desc&pageSize=50&fields=files(id,name)",
+        {
+          headers: {
+            'Authorization': `Bearer ${accessTokenRef.current}`,
+          },
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error('Nie udało się pobrać listy arkuszy')
+      }
+
+      const data = await response.json()
+      const files: SpreadsheetInfo[] = (data.files || []).map((f: { id: string; name: string }) => ({
+        id: f.id,
+        name: f.name,
+      }))
+
+      setSpreadsheets(files)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Błąd pobierania listy arkuszy'
+      setError(message)
+    } finally {
+      setIsLoadingSpreadsheets(false)
+    }
+  }, [])
+
+  // Create new spreadsheet
+  const createSpreadsheet = useCallback(async (name: string): Promise<string | null> => {
+    if (!accessTokenRef.current) {
+      setError('Nie jesteś połączony z Google Sheets')
+      return null
+    }
+
+    setIsLoadingSpreadsheets(true)
+    setError(null)
+
+    try {
+      const response = await fetch(
+        'https://sheets.googleapis.com/v4/spreadsheets',
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessTokenRef.current}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            properties: { title: name },
+            sheets: [
+              { properties: { title: MEALS_SHEET_NAME } },
+              { properties: { title: FAMILY_SHEET_NAME } },
+            ],
+          }),
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error('Nie udało się utworzyć arkusza')
+      }
+
+      const data = await response.json()
+      const newId = data.spreadsheetId
+
+      // Refresh list and select new spreadsheet
+      await listSpreadsheets()
+      updateSpreadsheetId(newId)
+
+      return newId
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Błąd tworzenia arkusza'
+      setError(message)
+      return null
+    } finally {
+      setIsLoadingSpreadsheets(false)
+    }
+  }, [listSpreadsheets, updateSpreadsheetId])
 
   // Helper to make authenticated requests
   const fetchWithAuth = useCallback(async (url: string, fetchOptions?: RequestInit) => {
@@ -559,9 +655,13 @@ export function useGoogleSheets(options?: UseGoogleSheetsOptions) {
     error,
     isConfigured,
     spreadsheetId,
+    spreadsheets,
+    isLoadingSpreadsheets,
     connect,
     disconnect,
     updateSpreadsheetId,
+    listSpreadsheets,
+    createSpreadsheet,
     syncToCloud,
     syncFromCloud,
     sync,

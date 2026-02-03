@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useGoogleDriveContext } from '../contexts/GoogleDriveContext'
 import { useGoogleSheetsContext } from '../contexts/GoogleSheetsContext'
 import { useMeals } from '../hooks/useMeals'
@@ -27,9 +27,13 @@ export default function SettingsPage() {
     error: sheetsError,
     isConfigured: isSheetsConfigured,
     spreadsheetId,
+    spreadsheets,
+    isLoadingSpreadsheets,
     connect: sheetsConnect,
     disconnect: sheetsDisconnect,
     updateSpreadsheetId,
+    listSpreadsheets,
+    createSpreadsheet,
     syncToCloud: sheetsSyncToCloud,
     syncFromCloud: sheetsSyncFromCloud,
     sync: sheetsSync,
@@ -40,7 +44,15 @@ export default function SettingsPage() {
 
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
   const [sheetsSyncMessage, setSheetsSyncMessage] = useState<string | null>(null)
-  const [spreadsheetIdInput, setSpreadsheetIdInput] = useState(spreadsheetId || '')
+  const [newSpreadsheetName, setNewSpreadsheetName] = useState('')
+  const [showCreateForm, setShowCreateForm] = useState(false)
+
+  // Load spreadsheets list when connected
+  useEffect(() => {
+    if (isSheetsConnected) {
+      listSpreadsheets()
+    }
+  }, [isSheetsConnected, listSpreadsheets])
 
   // Google Drive handlers
   const handleDriveSyncToCloud = async () => {
@@ -112,13 +124,19 @@ export default function SettingsPage() {
     }
   }
 
-  const handleSpreadsheetIdSave = () => {
-    const trimmedId = spreadsheetIdInput.trim()
-    // Extract ID from URL if full URL is provided
-    const urlMatch = trimmedId.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)
-    const extractedId = urlMatch ? urlMatch[1] : trimmedId
-    updateSpreadsheetId(extractedId || null)
-    setSpreadsheetIdInput(extractedId)
+  const handleSpreadsheetSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const id = e.target.value
+    updateSpreadsheetId(id || null)
+  }
+
+  const handleCreateSpreadsheet = async () => {
+    if (!newSpreadsheetName.trim()) return
+    const id = await createSpreadsheet(newSpreadsheetName.trim())
+    if (id) {
+      setNewSpreadsheetName('')
+      setShowCreateForm(false)
+      setSheetsSyncMessage('Utworzono nowy arkusz. Możesz go teraz udostępnić innym osobom.')
+    }
   }
 
   const handleExportCSV = () => {
@@ -168,119 +186,152 @@ export default function SettingsPage() {
                 w ustawieniach środowiska.
               </p>
             </div>
-          ) : (
-            <>
-              <div className="mb-3">
-                <label className="block text-sm text-gray-600 mb-1">
-                  ID arkusza Google Sheets
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={spreadsheetIdInput}
-                    onChange={(e) => setSpreadsheetIdInput(e.target.value)}
-                    placeholder="Wklej ID lub URL arkusza"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
-                  <button
-                    onClick={handleSpreadsheetIdSave}
-                    className="btn-secondary px-3"
-                  >
-                    Zapisz
-                  </button>
-                </div>
-                <p className="text-xs text-gray-400 mt-1">
-                  ID znajdziesz w URL arkusza: docs.google.com/spreadsheets/d/<strong>ID_ARKUSZA</strong>/edit
-                </p>
-              </div>
-
-              {!isSheetsConnected ? (
-                <button
-                  onClick={sheetsConnect}
-                  disabled={isSheetsLoading}
-                  className="btn-primary w-full flex items-center justify-center gap-2"
-                >
-                  {isSheetsLoading ? (
-                    <>
-                      <SpinnerIcon className="w-4 h-4 animate-spin" />
-                      Łączenie...
-                    </>
-                  ) : (
-                    <>
-                      <GoogleSheetsIcon className="w-5 h-5" />
-                      Połącz z Google Sheets
-                    </>
-                  )}
-                </button>
+          ) : !isSheetsConnected ? (
+            <button
+              onClick={sheetsConnect}
+              disabled={isSheetsLoading}
+              className="btn-primary w-full flex items-center justify-center gap-2"
+            >
+              {isSheetsLoading ? (
+                <>
+                  <SpinnerIcon className="w-4 h-4 animate-spin" />
+                  Łączenie...
+                </>
               ) : (
                 <>
-                  <div className="flex items-center gap-2 text-sm text-green-600 mb-3">
-                    <CheckIcon className="w-4 h-4" />
-                    <span>Połączono z Google Sheets</span>
-                  </div>
-
-                  {sheetsLastSyncedAt && (
-                    <p className="text-xs text-gray-400 mb-3">
-                      Ostatnia synchronizacja: {formatLastSync(sheetsLastSyncedAt)}
-                    </p>
-                  )}
-
-                  {spreadsheetId ? (
-                    <>
-                      <button
-                        onClick={handleSheetsSync}
-                        disabled={isSheetsSyncing}
-                        className="btn-primary w-full flex items-center justify-center gap-2 mb-3"
-                      >
-                        {isSheetsSyncing ? (
-                          <SpinnerIcon className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <SyncIcon className="w-4 h-4" />
-                        )}
-                        Synchronizuj
-                      </button>
-
-                      <div className="flex gap-2 mb-3">
-                        <button
-                          onClick={handleSheetsSyncToCloud}
-                          disabled={isSheetsSyncing}
-                          className="btn-secondary flex-1 flex items-center justify-center gap-2"
-                        >
-                          {isSheetsSyncing ? (
-                            <SpinnerIcon className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <UploadIcon className="w-4 h-4" />
-                          )}
-                          Wyślij
-                        </button>
-                        <button
-                          onClick={handleSheetsSyncFromCloud}
-                          disabled={isSheetsSyncing}
-                          className="btn-secondary flex-1 flex items-center justify-center gap-2"
-                        >
-                          {isSheetsSyncing ? (
-                            <SpinnerIcon className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <DownloadIcon className="w-4 h-4" />
-                          )}
-                          Pobierz
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-sm text-amber-600 mb-3">
-                      Podaj ID arkusza, aby rozpocząć synchronizację.
-                    </p>
-                  )}
-
-                  <button
-                    onClick={sheetsDisconnect}
-                    className="btn-ghost w-full text-red-600 hover:bg-red-50"
-                  >
-                    Rozłącz
-                  </button>
+                  <GoogleSheetsIcon className="w-5 h-5" />
+                  Połącz z Google Sheets
                 </>
               )}
+            </button>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 text-sm text-green-600 mb-3">
+                <CheckIcon className="w-4 h-4" />
+                <span>Połączono z Google Sheets</span>
+              </div>
+
+              {/* Spreadsheet selector */}
+              <div className="mb-3">
+                <label className="block text-sm text-gray-600 mb-1">
+                  Wybierz arkusz
+                </label>
+                <select
+                  value={spreadsheetId || ''}
+                  onChange={handleSpreadsheetSelect}
+                  disabled={isLoadingSpreadsheets}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
+                >
+                  <option value="">-- Wybierz arkusz --</option>
+                  {spreadsheets.map((sheet) => (
+                    <option key={sheet.id} value={sheet.id}>
+                      {sheet.name}
+                    </option>
+                  ))}
+                </select>
+                {isLoadingSpreadsheets && (
+                  <p className="text-xs text-gray-400 mt-1">Ładowanie listy arkuszy...</p>
+                )}
+              </div>
+
+              {/* Create new spreadsheet */}
+              {!showCreateForm ? (
+                <button
+                  onClick={() => setShowCreateForm(true)}
+                  className="btn-ghost w-full text-sm mb-3"
+                >
+                  + Utwórz nowy arkusz
+                </button>
+              ) : (
+                <div className="mb-3 p-3 bg-gray-50 rounded-lg">
+                  <label className="block text-sm text-gray-600 mb-1">
+                    Nazwa nowego arkusza
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newSpreadsheetName}
+                      onChange={(e) => setNewSpreadsheetName(e.target.value)}
+                      placeholder="np. Obiady rodzina Kowalskich"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                    <button
+                      onClick={handleCreateSpreadsheet}
+                      disabled={isLoadingSpreadsheets || !newSpreadsheetName.trim()}
+                      className="btn-primary px-3"
+                    >
+                      {isLoadingSpreadsheets ? <SpinnerIcon className="w-4 h-4 animate-spin" /> : 'Utwórz'}
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => setShowCreateForm(false)}
+                    className="text-xs text-gray-500 mt-2"
+                  >
+                    Anuluj
+                  </button>
+                </div>
+              )}
+
+              {sheetsLastSyncedAt && (
+                <p className="text-xs text-gray-400 mb-3">
+                  Ostatnia synchronizacja: {formatLastSync(sheetsLastSyncedAt)}
+                </p>
+              )}
+
+              {spreadsheetId ? (
+                <>
+                  <button
+                    onClick={handleSheetsSync}
+                    disabled={isSheetsSyncing}
+                    className="btn-primary w-full flex items-center justify-center gap-2 mb-3"
+                  >
+                    {isSheetsSyncing ? (
+                      <SpinnerIcon className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <SyncIcon className="w-4 h-4" />
+                    )}
+                    Synchronizuj
+                  </button>
+
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      onClick={handleSheetsSyncToCloud}
+                      disabled={isSheetsSyncing}
+                      className="btn-secondary flex-1 flex items-center justify-center gap-2"
+                    >
+                      {isSheetsSyncing ? (
+                        <SpinnerIcon className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <UploadIcon className="w-4 h-4" />
+                      )}
+                      Wyślij
+                    </button>
+                    <button
+                      onClick={handleSheetsSyncFromCloud}
+                      disabled={isSheetsSyncing}
+                      className="btn-secondary flex-1 flex items-center justify-center gap-2"
+                    >
+                      {isSheetsSyncing ? (
+                        <SpinnerIcon className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <DownloadIcon className="w-4 h-4" />
+                      )}
+                      Pobierz
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-amber-600 mb-3">
+                  Wybierz arkusz z listy powyżej, aby rozpocząć synchronizację.
+                </p>
+              )}
+
+              <button
+                onClick={sheetsDisconnect}
+                className="btn-ghost w-full text-red-600 hover:bg-red-50"
+              >
+                Rozłącz
+              </button>
 
               {sheetsError && (
                 <p className="text-sm text-red-600 mt-3">{sheetsError}</p>

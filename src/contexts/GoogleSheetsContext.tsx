@@ -1,5 +1,5 @@
 import { createContext, useContext, ReactNode } from 'react'
-import { useGoogleSheets } from '../hooks/useGoogleSheets'
+import { useGoogleSheets, SpreadsheetInfo } from '../hooks/useGoogleSheets'
 
 interface GoogleSheetsContextType {
   isConnected: boolean
@@ -9,9 +9,13 @@ interface GoogleSheetsContextType {
   error: string | null
   isConfigured: boolean
   spreadsheetId: string | null
+  spreadsheets: SpreadsheetInfo[]
+  isLoadingSpreadsheets: boolean
   connect: () => void
   disconnect: () => void
   updateSpreadsheetId: (id: string | null) => void
+  listSpreadsheets: () => Promise<void>
+  createSpreadsheet: (name: string) => Promise<string | null>
   syncToCloud: () => Promise<void>
   syncFromCloud: () => Promise<boolean>
   sync: () => Promise<void>
