@@ -19,6 +19,7 @@ interface GoogleSheetsContextType {
   syncToCloud: () => Promise<void>
   syncFromCloud: () => Promise<boolean>
   sync: () => Promise<void>
+  triggerAutoSync: () => void
 }
 
 const GoogleSheetsContext = createContext<GoogleSheetsContextType | null>(null)
