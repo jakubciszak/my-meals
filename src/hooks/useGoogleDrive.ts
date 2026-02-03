@@ -3,6 +3,9 @@ import type { Meal, FamilyMember } from '../types'
 
 const SCOPES = 'https://www.googleapis.com/auth/drive.file'
 
+// Custom event name for data changes (shared with useGoogleSheets)
+export const DATA_CHANGED_EVENT = 'my-meals-data-changed'
+
 const MEALS_FILE_NAME = 'my-meals-data.csv'
 const FAMILY_FILE_NAME = 'my-meals-family.csv'
 
@@ -23,6 +26,7 @@ export function useGoogleDrive(options?: UseGoogleDriveOptions) {
   const [isSyncing, setIsSyncing] = useState(false)
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [hasUnsyncedChanges, setHasUnsyncedChanges] = useState(false)
 
   const tokenClientRef = useRef<google.accounts.oauth2.TokenClient | null>(null)
   const accessTokenRef = useRef<string | null>(null)
@@ -363,6 +367,7 @@ export function useGoogleDrive(options?: UseGoogleDriveOptions) {
       const now = new Date().toISOString()
       setLastSyncedAt(now)
       localStorage.setItem(LAST_SYNC_KEY, now)
+      setHasUnsyncedChanges(false)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Błąd synchronizacji'
       setError(message)
@@ -407,6 +412,7 @@ export function useGoogleDrive(options?: UseGoogleDriveOptions) {
       const now = new Date().toISOString()
       setLastSyncedAt(now)
       localStorage.setItem(LAST_SYNC_KEY, now)
+      setHasUnsyncedChanges(false)
 
       // Notify that data was imported (triggers page reload)
       options?.onDataImported?.()
@@ -519,6 +525,7 @@ export function useGoogleDrive(options?: UseGoogleDriveOptions) {
       const now = new Date().toISOString()
       setLastSyncedAt(now)
       localStorage.setItem(LAST_SYNC_KEY, now)
+      setHasUnsyncedChanges(false)
 
       // Notify that data was imported (triggers page reload)
       options?.onDataImported?.()
@@ -533,6 +540,21 @@ export function useGoogleDrive(options?: UseGoogleDriveOptions) {
 
   const isConfigured = Boolean(clientId)
 
+  // Listen for data change events to track unsynced changes
+  useEffect(() => {
+    const handleDataChanged = () => {
+      if (isConnected) {
+        setHasUnsyncedChanges(true)
+      }
+    }
+
+    window.addEventListener(DATA_CHANGED_EVENT, handleDataChanged)
+
+    return () => {
+      window.removeEventListener(DATA_CHANGED_EVENT, handleDataChanged)
+    }
+  }, [isConnected])
+
   return {
     isConnected,
     isLoading,
@@ -540,6 +562,7 @@ export function useGoogleDrive(options?: UseGoogleDriveOptions) {
     lastSyncedAt,
     error,
     isConfigured,
+    hasUnsyncedChanges,
     connect,
     disconnect,
     syncToCloud,
