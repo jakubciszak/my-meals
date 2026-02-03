@@ -8,6 +8,7 @@ interface GoogleDriveContextType {
   lastSyncedAt: string | null
   error: string | null
   isConfigured: boolean
+  hasUnsyncedChanges: boolean
   connect: () => void
   disconnect: () => void
   syncToCloud: () => Promise<void>

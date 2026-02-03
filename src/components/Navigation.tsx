@@ -9,7 +9,7 @@ const navItems = [
 ]
 
 export default function Navigation() {
-  const { isConnected, isSyncing, isConfigured } = useGoogleDriveContext()
+  const { isConnected, isSyncing, isConfigured, hasUnsyncedChanges } = useGoogleDriveContext()
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 safe-bottom">
@@ -38,12 +38,18 @@ export default function Navigation() {
             title={isConnected ? 'Połączono z Google Drive' : 'Połącz z Google Drive'}
           >
             <div className="relative">
-              <CloudIcon className="w-6 h-6" />
-              {isSyncing && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
-              )}
-              {isConnected && !isSyncing && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full" />
+              {isSyncing ? (
+                <LoaderIcon className="w-6 h-6 animate-spin text-primary-500" />
+              ) : (
+                <CloudIcon
+                  className={`w-6 h-6 ${
+                    isConnected && hasUnsyncedChanges
+                      ? 'text-yellow-500'
+                      : isConnected
+                      ? 'text-green-500'
+                      : ''
+                  }`}
+                />
               )}
             </div>
             <span className="text-xs mt-1">Sync</span>
@@ -91,6 +97,14 @@ function CloudIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+    </svg>
+  )
+}
+
+function LoaderIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
     </svg>
   )
 }
