@@ -1,12 +1,15 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type { Meal, MealRating, FamilyMember } from '../types'
 
 const STORAGE_KEY = 'my-meals-data'
 
 export function useMeals() {
-  const [meals, setMeals] = useState<Meal[]>([])
+  const [allMeals, setAllMeals] = useState<Meal[]>([])
   const [isLoading, setIsLoading] = useState(true)
+
+  // Filter out deleted meals for public API
+  const meals = useMemo(() => allMeals.filter(m => !m.deletedAt), [allMeals])
 
   // Load meals from localStorage on mount
   useEffect(() => {
@@ -14,7 +17,7 @@ export function useMeals() {
     if (stored) {
       try {
         const data = JSON.parse(stored)
-        setMeals(data.meals || [])
+        setAllMeals(data.meals || [])
       } catch {
         console.error('Failed to parse stored meals')
       }
@@ -22,12 +25,12 @@ export function useMeals() {
     setIsLoading(false)
   }, [])
 
-  // Save meals to localStorage whenever they change
+  // Save all meals (including deleted) to localStorage whenever they change
   useEffect(() => {
     if (!isLoading) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ meals }))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ meals: allMeals }))
     }
-  }, [meals, isLoading])
+  }, [allMeals, isLoading])
 
   const addMeal = useCallback((name: string, date?: string, ingredients?: string[]) => {
     const now = new Date().toISOString()
@@ -35,7 +38,7 @@ export function useMeals() {
     const trimmedName = name.trim()
     const normalizedName = trimmedName.toLowerCase()
 
-    // Find existing preferences for this dish from previous entries
+    // Find existing preferences for this dish from previous entries (only non-deleted)
     const existingPreferences: MealRating[] = []
     const preferencesMap = new Map<string, MealRating>()
 
@@ -65,12 +68,17 @@ export function useMeals() {
       updatedAt: now,
     }
 
-    setMeals(prev => [newMeal, ...prev])
+    setAllMeals(prev => [newMeal, ...prev])
     return newMeal
   }, [meals])
 
   const deleteMeal = useCallback((id: string) => {
-    setMeals(prev => prev.filter(meal => meal.id !== id))
+    const now = new Date().toISOString()
+    setAllMeals(prev => prev.map(meal =>
+      meal.id === id
+        ? { ...meal, deletedAt: now, updatedAt: now }
+        : meal
+    ))
   }, [])
 
   const getMealsByDate = useCallback((date: string) => {
@@ -104,7 +112,7 @@ export function useMeals() {
   }, [meals])
 
   const updateMealRating = useCallback((mealId: string, memberId: string, liked: boolean | null) => {
-    setMeals(prev => prev.map(meal => {
+    setAllMeals(prev => prev.map(meal => {
       if (meal.id !== mealId) return meal
 
       const now = new Date().toISOString()

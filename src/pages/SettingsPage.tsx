@@ -15,6 +15,7 @@ export default function SettingsPage() {
     disconnect,
     syncToCloud,
     syncFromCloud,
+    sync,
   } = useGoogleDriveContext()
 
   const { meals, exportToCSV } = useMeals()
@@ -41,6 +42,16 @@ export default function SettingsPage() {
       } else {
         setSyncMessage('Brak danych w Google Drive')
       }
+    } catch {
+      // Error is already set in the hook
+    }
+  }
+
+  const handleSync = async () => {
+    setSyncMessage(null)
+    try {
+      await sync()
+      setSyncMessage('Dane zostały zsynchronizowane. Strona zostanie odświeżona...')
     } catch {
       // Error is already set in the hook
     }
@@ -126,11 +137,24 @@ export default function SettingsPage() {
                 </p>
               )}
 
+              <button
+                onClick={handleSync}
+                disabled={isSyncing}
+                className="btn-primary w-full flex items-center justify-center gap-2 mb-3"
+              >
+                {isSyncing ? (
+                  <SpinnerIcon className="w-4 h-4 animate-spin" />
+                ) : (
+                  <SyncIcon className="w-4 h-4" />
+                )}
+                Synchronizuj
+              </button>
+
               <div className="flex gap-2 mb-3">
                 <button
                   onClick={handleSyncToCloud}
                   disabled={isSyncing}
-                  className="btn-primary flex-1 flex items-center justify-center gap-2"
+                  className="btn-secondary flex-1 flex items-center justify-center gap-2"
                 >
                   {isSyncing ? (
                     <SpinnerIcon className="w-4 h-4 animate-spin" />
@@ -239,6 +263,14 @@ function DownloadIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+    </svg>
+  )
+}
+
+function SyncIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
     </svg>
   )
 }

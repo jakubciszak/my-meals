@@ -3,6 +3,8 @@ export interface FamilyMember {
   name: string
   avatar?: string
   createdAt: string
+  updatedAt: string
+  deletedAt?: string
 }
 
 export interface MealRating {
@@ -19,6 +21,7 @@ export interface Meal {
   notes?: string
   createdAt: string
   updatedAt: string
+  deletedAt?: string
 }
 
 export interface AppState {
