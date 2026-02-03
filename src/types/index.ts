@@ -38,3 +38,11 @@ export interface DishPreferences {
 }
 
 export type StorageProvider = 'local' | 'google-drive'
+
+// Google Drive sync status
+export interface GoogleDriveState {
+  isConnected: boolean
+  isLoading: boolean
+  lastSyncedAt: string | null
+  error: string | null
+}

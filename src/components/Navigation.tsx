@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { useGoogleDriveContext } from '../contexts/GoogleDriveContext'
 
 const navItems = [
   { to: '/', label: 'Dziś', icon: HomeIcon },
@@ -8,6 +9,8 @@ const navItems = [
 ]
 
 export default function Navigation() {
+  const { isConnected, isSyncing, isConfigured } = useGoogleDriveContext()
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 safe-bottom">
       <div className="flex justify-around items-center h-16 max-w-lg mx-auto">
@@ -27,6 +30,25 @@ export default function Navigation() {
             <span className="text-xs mt-1">{item.label}</span>
           </NavLink>
         ))}
+
+        {isConfigured && (
+          <NavLink
+            to="/settings"
+            className="flex flex-col items-center justify-center w-full h-full transition-colors text-gray-500 hover:text-gray-700"
+            title={isConnected ? 'Połączono z Google Drive' : 'Połącz z Google Drive'}
+          >
+            <div className="relative">
+              <CloudIcon className="w-6 h-6" />
+              {isSyncing && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+              )}
+              {isConnected && !isSyncing && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full" />
+              )}
+            </div>
+            <span className="text-xs mt-1">Sync</span>
+          </NavLink>
+        )}
       </div>
     </nav>
   )
@@ -61,6 +83,14 @@ function SettingsIcon({ className }: { className?: string }) {
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  )
+}
+
+function CloudIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
     </svg>
   )
 }
