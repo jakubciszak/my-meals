@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import App from './App'
 import { GoogleDriveProvider } from './contexts/GoogleDriveContext'
+import { GoogleSheetsProvider } from './contexts/GoogleSheetsContext'
 import './index.css'
 
 const handleDataImported = () => {
@@ -14,7 +15,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <HashRouter>
       <GoogleDriveProvider onDataImported={handleDataImported}>
-        <App />
+        <GoogleSheetsProvider onDataImported={handleDataImported}>
+          <App />
+        </GoogleSheetsProvider>
       </GoogleDriveProvider>
     </HashRouter>
   </StrictMode>,
