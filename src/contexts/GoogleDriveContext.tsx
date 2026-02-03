@@ -12,6 +12,7 @@ interface GoogleDriveContextType {
   disconnect: () => void
   syncToCloud: () => Promise<void>
   syncFromCloud: () => Promise<boolean>
+  sync: () => Promise<void>
 }
 
 const GoogleDriveContext = createContext<GoogleDriveContextType | null>(null)

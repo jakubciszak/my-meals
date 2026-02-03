@@ -200,7 +200,7 @@ export function useGoogleDrive(options?: UseGoogleDriveOptions) {
 
   // Convert meals to CSV
   const mealsToCSV = useCallback((meals: Meal[]): string => {
-    const headers = ['id', 'name', 'date', 'ratings', 'ingredients', 'notes', 'createdAt', 'updatedAt']
+    const headers = ['id', 'name', 'date', 'ratings', 'ingredients', 'notes', 'createdAt', 'updatedAt', 'deletedAt']
 
     const rows = meals.map(meal => {
       const ratingsJson = JSON.stringify(meal.ratings)
@@ -215,6 +215,7 @@ export function useGoogleDrive(options?: UseGoogleDriveOptions) {
         escapeCSVField(meal.notes || ''),
         meal.createdAt,
         meal.updatedAt,
+        meal.deletedAt || '',
       ].join(',')
     })
 
@@ -223,13 +224,15 @@ export function useGoogleDrive(options?: UseGoogleDriveOptions) {
 
   // Convert family members to CSV
   const familyToCSV = useCallback((members: FamilyMember[]): string => {
-    const headers = ['id', 'name', 'avatar', 'createdAt']
+    const headers = ['id', 'name', 'avatar', 'createdAt', 'updatedAt', 'deletedAt']
 
     const rows = members.map(member => [
       member.id,
       escapeCSVField(member.name),
       escapeCSVField(member.avatar || ''),
       member.createdAt,
+      member.updatedAt || member.createdAt,
+      member.deletedAt || '',
     ].join(','))
 
     return [headers.join(','), ...rows].join('\n')
@@ -259,6 +262,7 @@ export function useGoogleDrive(options?: UseGoogleDriveOptions) {
           notes: fields[5] || undefined,
           createdAt: fields[6],
           updatedAt: fields[7],
+          deletedAt: fields[8] || undefined,
         })
       } catch {
         console.error('Failed to parse meal row:', line)
@@ -287,6 +291,8 @@ export function useGoogleDrive(options?: UseGoogleDriveOptions) {
         name: fields[1],
         avatar: fields[2] || undefined,
         createdAt: fields[3],
+        updatedAt: fields[4] || fields[3],
+        deletedAt: fields[5] || undefined,
       })
     }
 
@@ -415,6 +421,116 @@ export function useGoogleDrive(options?: UseGoogleDriveOptions) {
     }
   }, [isConnected, findFile, downloadFile, csvToMeals, csvToFamily, saveLocalData, options])
 
+  // Merge helper - takes the most recent version of each item
+  const mergeMeals = useCallback((local: Meal[], cloud: Meal[]): Meal[] => {
+    const mealsMap = new Map<string, Meal>()
+
+    // Add all cloud meals to map
+    for (const meal of cloud) {
+      mealsMap.set(meal.id, meal)
+    }
+
+    // Merge local meals - take the one with most recent updatedAt
+    for (const meal of local) {
+      const existing = mealsMap.get(meal.id)
+      if (!existing) {
+        mealsMap.set(meal.id, meal)
+      } else {
+        const localTime = new Date(meal.updatedAt).getTime()
+        const cloudTime = new Date(existing.updatedAt).getTime()
+        if (localTime > cloudTime) {
+          mealsMap.set(meal.id, meal)
+        }
+      }
+    }
+
+    return Array.from(mealsMap.values())
+  }, [])
+
+  const mergeFamily = useCallback((local: FamilyMember[], cloud: FamilyMember[]): FamilyMember[] => {
+    const membersMap = new Map<string, FamilyMember>()
+
+    // Add all cloud members to map
+    for (const member of cloud) {
+      membersMap.set(member.id, member)
+    }
+
+    // Merge local members - take the one with most recent updatedAt
+    for (const member of local) {
+      const existing = membersMap.get(member.id)
+      if (!existing) {
+        membersMap.set(member.id, member)
+      } else {
+        const localTime = new Date(member.updatedAt || member.createdAt).getTime()
+        const cloudTime = new Date(existing.updatedAt || existing.createdAt).getTime()
+        if (localTime > cloudTime) {
+          membersMap.set(member.id, member)
+        }
+      }
+    }
+
+    return Array.from(membersMap.values())
+  }, [])
+
+  // Two-way sync: merge local and cloud data
+  const sync = useCallback(async (): Promise<void> => {
+    if (!isConnected) {
+      throw new Error('Nie jesteś połączony z Google Drive')
+    }
+
+    setIsSyncing(true)
+    setError(null)
+
+    try {
+      // Get local data
+      const localData = getLocalData()
+
+      // Find existing files in cloud
+      const [mealsFileId, familyFileId] = await Promise.all([
+        findFile(MEALS_FILE_NAME),
+        findFile(FAMILY_FILE_NAME),
+      ])
+
+      // Download cloud data if exists
+      const [mealsCSV, familyCSV] = await Promise.all([
+        mealsFileId ? downloadFile(mealsFileId) : Promise.resolve(''),
+        familyFileId ? downloadFile(familyFileId) : Promise.resolve(''),
+      ])
+
+      const cloudMeals = mealsCSV ? csvToMeals(mealsCSV) : []
+      const cloudFamily = familyCSV ? csvToFamily(familyCSV) : []
+
+      // Merge data - take the most recent version of each item
+      const mergedMeals = mergeMeals(localData.meals, cloudMeals)
+      const mergedFamily = mergeFamily(localData.familyMembers, cloudFamily)
+
+      // Upload merged data to cloud
+      const mergedMealsCSV = mealsToCSV(mergedMeals)
+      const mergedFamilyCSV = familyToCSV(mergedFamily)
+
+      await Promise.all([
+        uploadFile(MEALS_FILE_NAME, mergedMealsCSV, mealsFileId),
+        uploadFile(FAMILY_FILE_NAME, mergedFamilyCSV, familyFileId),
+      ])
+
+      // Save merged data locally
+      saveLocalData(mergedMeals, mergedFamily)
+
+      const now = new Date().toISOString()
+      setLastSyncedAt(now)
+      localStorage.setItem(LAST_SYNC_KEY, now)
+
+      // Notify that data was imported (triggers page reload)
+      options?.onDataImported?.()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Błąd synchronizacji'
+      setError(message)
+      throw err
+    } finally {
+      setIsSyncing(false)
+    }
+  }, [isConnected, getLocalData, findFile, downloadFile, csvToMeals, csvToFamily, mergeMeals, mergeFamily, mealsToCSV, familyToCSV, uploadFile, saveLocalData, options])
+
   const isConfigured = Boolean(clientId)
 
   return {
@@ -428,6 +544,7 @@ export function useGoogleDrive(options?: UseGoogleDriveOptions) {
     disconnect,
     syncToCloud,
     syncFromCloud,
+    sync,
   }
 }
 

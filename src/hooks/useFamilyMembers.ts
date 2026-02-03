@@ -1,12 +1,15 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type { FamilyMember } from '../types'
 
 const STORAGE_KEY = 'my-meals-family'
 
 export function useFamilyMembers() {
-  const [members, setMembers] = useState<FamilyMember[]>([])
+  const [allMembers, setAllMembers] = useState<FamilyMember[]>([])
   const [isLoading, setIsLoading] = useState(true)
+
+  // Filter out deleted members for public API
+  const members = useMemo(() => allMembers.filter(m => !m.deletedAt), [allMembers])
 
   // Load members from localStorage on mount
   useEffect(() => {
@@ -14,7 +17,7 @@ export function useFamilyMembers() {
     if (stored) {
       try {
         const data = JSON.parse(stored)
-        setMembers(data.members || [])
+        setAllMembers(data.members || [])
       } catch {
         console.error('Failed to parse stored family members')
       }
@@ -22,12 +25,12 @@ export function useFamilyMembers() {
     setIsLoading(false)
   }, [])
 
-  // Save members to localStorage whenever they change
+  // Save all members (including deleted) to localStorage whenever they change
   useEffect(() => {
     if (!isLoading) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ members }))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ members: allMembers }))
     }
-  }, [members, isLoading])
+  }, [allMembers, isLoading])
 
   const addMember = useCallback((name: string, avatar?: string) => {
     const now = new Date().toISOString()
@@ -37,22 +40,29 @@ export function useFamilyMembers() {
       name: name.trim(),
       avatar,
       createdAt: now,
+      updatedAt: now,
     }
 
-    setMembers(prev => [...prev, newMember])
+    setAllMembers(prev => [...prev, newMember])
     return newMember
   }, [])
 
   const updateMember = useCallback((id: string, updates: Partial<Omit<FamilyMember, 'id' | 'createdAt'>>) => {
-    setMembers(prev => prev.map(member =>
+    const now = new Date().toISOString()
+    setAllMembers(prev => prev.map(member =>
       member.id === id
-        ? { ...member, ...updates, name: updates.name?.trim() || member.name }
+        ? { ...member, ...updates, name: updates.name?.trim() || member.name, updatedAt: now }
         : member
     ))
   }, [])
 
   const deleteMember = useCallback((id: string) => {
-    setMembers(prev => prev.filter(member => member.id !== id))
+    const now = new Date().toISOString()
+    setAllMembers(prev => prev.map(member =>
+      member.id === id
+        ? { ...member, deletedAt: now, updatedAt: now }
+        : member
+    ))
   }, [])
 
   const getMemberById = useCallback((id: string) => {
