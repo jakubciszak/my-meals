@@ -1,24 +1,43 @@
-import { useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useMeals } from '../hooks/useMeals'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import type { Meal, FamilyMember } from '../types'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
+interface MealMemberInfo {
+  id: string
+  name: string
+}
+
 interface UniqueMeal {
   name: string
   lastServedDate: string
-  likedBy: string[]
-  dislikedBy: string[]
+  likedBy: MealMemberInfo[]
+  dislikedBy: MealMemberInfo[]
+}
+
+type SortColumn = 'name' | 'date' | 'likedCount' | 'dislikedCount'
+type SortDirection = 'asc' | 'desc'
+
+const SORT_LABELS: Record<SortColumn, string> = {
+  name: 'Nazwa',
+  date: 'Data',
+  likedCount: 'Polubienia',
+  dislikedCount: 'Niepolubienia',
 }
 
 function buildUniqueMeals(meals: Meal[], members: FamilyMember[]): UniqueMeal[] {
-  const getMemberName = (memberId: string) => {
+  const getMemberInfo = (memberId: string): MealMemberInfo => {
     const member = members.find(m => m.id === memberId)
-    return member?.name || 'Nieznany'
+    return { id: memberId, name: member?.name || 'Nieznany' }
   }
 
-  const mealMap = new Map<string, { lastServedDate: string; likedBySet: Set<string>; dislikedBySet: Set<string> }>()
+  const mealMap = new Map<string, {
+    lastServedDate: string
+    likedByMap: Map<string, MealMemberInfo>
+    dislikedByMap: Map<string, MealMemberInfo>
+  }>()
 
   // Sort meals by date descending so we process newest first
   const sortedMeals = [...meals].sort((a, b) =>
@@ -31,34 +50,30 @@ function buildUniqueMeals(meals: Meal[], members: FamilyMember[]): UniqueMeal[] 
     if (!mealMap.has(key)) {
       mealMap.set(key, {
         lastServedDate: meal.date,
-        likedBySet: new Set<string>(),
-        dislikedBySet: new Set<string>(),
+        likedByMap: new Map(),
+        dislikedByMap: new Map(),
       })
     }
 
     const entry = mealMap.get(key)!
 
-    // Update last served date if this one is more recent
     if (meal.date > entry.lastServedDate) {
       entry.lastServedDate = meal.date
     }
 
-    // Aggregate ratings - collect all unique members who liked/disliked
     for (const rating of meal.ratings) {
-      const name = getMemberName(rating.memberId)
+      const info = getMemberInfo(rating.memberId)
       if (rating.liked) {
-        entry.likedBySet.add(name)
-        entry.dislikedBySet.delete(name) // If liked in newer entry, remove from disliked
+        entry.likedByMap.set(rating.memberId, info)
+        entry.dislikedByMap.delete(rating.memberId)
       } else {
-        entry.dislikedBySet.add(name)
-        entry.likedBySet.delete(name)
+        entry.dislikedByMap.set(rating.memberId, info)
+        entry.likedByMap.delete(rating.memberId)
       }
     }
   }
 
-  const uniqueMeals: UniqueMeal[] = []
-
-  // We need to use the original casing from the first (most recent) occurrence
+  // Preserve original casing from the most recent occurrence
   const nameMap = new Map<string, string>()
   for (const meal of sortedMeals) {
     const key = meal.name.toLowerCase()
@@ -67,21 +82,38 @@ function buildUniqueMeals(meals: Meal[], members: FamilyMember[]): UniqueMeal[] 
     }
   }
 
+  const uniqueMeals: UniqueMeal[] = []
   for (const [key, entry] of mealMap.entries()) {
     uniqueMeals.push({
       name: nameMap.get(key) || key,
       lastServedDate: entry.lastServedDate,
-      likedBy: Array.from(entry.likedBySet),
-      dislikedBy: Array.from(entry.dislikedBySet),
+      likedBy: Array.from(entry.likedByMap.values()),
+      dislikedBy: Array.from(entry.dislikedByMap.values()),
     })
   }
 
-  // Sort by last served date descending
-  uniqueMeals.sort((a, b) =>
-    new Date(b.lastServedDate).getTime() - new Date(a.lastServedDate).getTime()
-  )
-
   return uniqueMeals
+}
+
+function sortMeals(meals: UniqueMeal[], column: SortColumn, direction: SortDirection): UniqueMeal[] {
+  return [...meals].sort((a, b) => {
+    let cmp = 0
+    switch (column) {
+      case 'name':
+        cmp = a.name.localeCompare(b.name, 'pl')
+        break
+      case 'date':
+        cmp = new Date(a.lastServedDate).getTime() - new Date(b.lastServedDate).getTime()
+        break
+      case 'likedCount':
+        cmp = a.likedBy.length - b.likedBy.length
+        break
+      case 'dislikedCount':
+        cmp = a.dislikedBy.length - b.dislikedBy.length
+        break
+    }
+    return direction === 'asc' ? cmp : -cmp
+  })
 }
 
 function formatDate(dateString: string): string {
@@ -140,8 +172,8 @@ function exportToPdf(uniqueMeals: UniqueMeal[]) {
     String(index + 1),
     meal.name,
     formatDateForPdf(meal.lastServedDate),
-    meal.likedBy.length > 0 ? meal.likedBy.join(', ') : '-',
-    meal.dislikedBy.length > 0 ? meal.dislikedBy.join(', ') : '-',
+    meal.likedBy.length > 0 ? meal.likedBy.map(m => m.name).join(', ') : '-',
+    meal.dislikedBy.length > 0 ? meal.dislikedBy.map(m => m.name).join(', ') : '-',
   ])
 
   autoTable(doc, {
@@ -176,28 +208,87 @@ export default function MealsListPage() {
   const { meals, isLoading } = useMeals()
   const { members, isLoading: membersLoading } = useFamilyMembers()
 
-  const uniqueMeals = useMemo(
-    () => buildUniqueMeals(meals, members),
-    [meals, members],
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortColumn, setSortColumn] = useState<SortColumn>('date')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [likedByMemberId, setLikedByMemberId] = useState('')
+  const [dislikedByMemberId, setDislikedByMemberId] = useState('')
+  const [showFilters, setShowFilters] = useState(false)
+
+  // Pre-filter raw meals by date range before aggregation
+  const dateFilteredMeals = useMemo(() => {
+    if (!dateFrom && !dateTo) return meals
+    return meals.filter(meal => {
+      if (dateFrom && meal.date < dateFrom) return false
+      if (dateTo && meal.date > dateTo) return false
+      return true
+    })
+  }, [meals, dateFrom, dateTo])
+
+  // Build unique meals from date-filtered raw meals
+  const allUniqueMeals = useMemo(
+    () => buildUniqueMeals(dateFilteredMeals, members),
+    [dateFilteredMeals, members],
   )
 
+  // Apply search and member filters, then sort
+  const filteredMeals = useMemo(() => {
+    let result = allUniqueMeals
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase()
+      result = result.filter(m => m.name.toLowerCase().includes(q))
+    }
+
+    if (likedByMemberId) {
+      result = result.filter(m => m.likedBy.some(mb => mb.id === likedByMemberId))
+    }
+
+    if (dislikedByMemberId) {
+      result = result.filter(m => m.dislikedBy.some(mb => mb.id === dislikedByMemberId))
+    }
+
+    return sortMeals(result, sortColumn, sortDirection)
+  }, [allUniqueMeals, searchQuery, likedByMemberId, dislikedByMemberId, sortColumn, sortDirection])
+
+  const activeFilterCount = [dateFrom, dateTo, likedByMemberId, dislikedByMemberId].filter(Boolean).length
+
+  const handleClearFilters = () => {
+    setDateFrom('')
+    setDateTo('')
+    setLikedByMemberId('')
+    setDislikedByMemberId('')
+    setSearchQuery('')
+  }
+
+  const handleToggleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection(column === 'name' ? 'asc' : 'desc')
+    }
+  }
+
   const handleExportPdf = () => {
-    if (uniqueMeals.length === 0) return
-    exportToPdf(uniqueMeals)
+    if (filteredMeals.length === 0) return
+    exportToPdf(filteredMeals)
   }
 
   return (
     <div className="px-4 py-6">
-      <header className="mb-6 flex items-start justify-between">
+      <header className="mb-4 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Lista posilkow</h1>
           <p className="text-gray-500">
-            {uniqueMeals.length > 0
-              ? `${uniqueMeals.length} unikalnych posilkow`
+            {filteredMeals.length > 0
+              ? `${filteredMeals.length} ${filteredMeals.length !== allUniqueMeals.length ? `z ${allUniqueMeals.length} ` : ''}unikalnych posilkow`
               : 'Przegladaj wszystkie posilki'}
           </p>
         </div>
-        {uniqueMeals.length > 0 && (
+        {filteredMeals.length > 0 && (
           <button
             onClick={handleExportPdf}
             className="btn-secondary flex items-center gap-2"
@@ -220,16 +311,166 @@ export default function MealsListPage() {
         )}
       </header>
 
+      {/* Search */}
+      <div className="mb-3">
+        <div className="relative">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              fillRule="evenodd"
+              d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Szukaj posilku..."
+            className="input pl-10"
+          />
+        </div>
+      </div>
+
+      {/* Sort + Filter toggle row */}
+      <div className="mb-3 flex items-center gap-2">
+        {/* Sort controls */}
+        <div className="flex items-center gap-1 flex-1 min-w-0">
+          <select
+            value={sortColumn}
+            onChange={e => {
+              const col = e.target.value as SortColumn
+              setSortColumn(col)
+              setSortDirection(col === 'name' ? 'asc' : 'desc')
+            }}
+            className="text-sm border border-gray-300 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent min-w-0"
+          >
+            {(Object.keys(SORT_LABELS) as SortColumn[]).map(col => (
+              <option key={col} value={col}>
+                {SORT_LABELS[col]}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => handleToggleSort(sortColumn)}
+            className="btn-ghost p-2 flex-shrink-0"
+            aria-label={sortDirection === 'asc' ? 'Sortuj malejaco' : 'Sortuj rosnaco'}
+            title={sortDirection === 'asc' ? 'Rosnaco' : 'Malejaco'}
+          >
+            {sortDirection === 'asc' ? (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            )}
+          </button>
+        </div>
+
+        {/* Filter toggle */}
+        <button
+          onClick={() => setShowFilters(prev => !prev)}
+          className={`btn-ghost flex items-center gap-1 text-sm flex-shrink-0 ${showFilters ? 'bg-primary-50 text-primary-700' : ''}`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 019 17v-5.586L4.293 6.707A1 1 0 014 6V3z" clipRule="evenodd" />
+          </svg>
+          Filtry
+          {activeFilterCount > 0 && (
+            <span className="bg-primary-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Collapsible filter panel */}
+      {showFilters && (
+        <div className="card mb-4 space-y-3">
+          {/* Date range */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Zakres dat</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={e => setDateFrom(e.target.value)}
+                className="text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent flex-1"
+                placeholder="Od"
+              />
+              <span className="text-gray-400 text-sm">—</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={e => setDateTo(e.target.value)}
+                className="text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent flex-1"
+                placeholder="Do"
+              />
+            </div>
+          </div>
+
+          {/* Member filters */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Polubione przez</label>
+              <select
+                value={likedByMemberId}
+                onChange={e => setLikedByMemberId(e.target.value)}
+                className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="">Wszyscy</option>
+                {members.map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nie polubione przez</label>
+              <select
+                value={dislikedByMemberId}
+                onChange={e => setDislikedByMemberId(e.target.value)}
+                className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="">Wszyscy</option>
+                {members.map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Clear filters */}
+          {activeFilterCount > 0 && (
+            <button
+              onClick={handleClearFilters}
+              className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+            >
+              Wyczysc wszystkie filtry
+            </button>
+          )}
+        </div>
+      )}
+
       <section>
         {isLoading || membersLoading ? (
           <p className="text-gray-500 text-center py-8">Ladowanie...</p>
-        ) : uniqueMeals.length === 0 ? (
+        ) : allUniqueMeals.length === 0 && !dateFrom && !dateTo ? (
           <p className="text-gray-500 text-center py-8">
             Brak zapisanych posilkow.
           </p>
+        ) : filteredMeals.length === 0 ? (
+          <p className="text-gray-500 text-center py-8">
+            Brak posilkow pasujacych do filtrow.
+          </p>
         ) : (
           <div className="space-y-3">
-            {uniqueMeals.map((meal) => (
+            {filteredMeals.map((meal) => (
               <div key={meal.name} className="card">
                 <div className="flex items-start justify-between">
                   <p className="font-medium text-gray-900">{meal.name}</p>
@@ -251,7 +492,7 @@ export default function MealsListPage() {
                         </svg>
                       </span>
                       <span className="text-gray-600">
-                        {meal.likedBy.join(', ')}
+                        {meal.likedBy.map(m => m.name).join(', ')}
                       </span>
                     </div>
                   )}
@@ -268,7 +509,7 @@ export default function MealsListPage() {
                         </svg>
                       </span>
                       <span className="text-gray-600">
-                        {meal.dislikedBy.join(', ')}
+                        {meal.dislikedBy.map(m => m.name).join(', ')}
                       </span>
                     </div>
                   )}
