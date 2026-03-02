@@ -148,11 +148,34 @@ function formatDateForPdf(dateString: string): string {
   })
 }
 
-function exportToPdf(uniqueMeals: UniqueMeal[]) {
+let fontCache: string | null = null
+
+async function loadRobotoFont(): Promise<string> {
+  if (fontCache) return fontCache
+  const response = await fetch(`${import.meta.env.BASE_URL}fonts/Roboto.ttf`)
+  const buffer = await response.arrayBuffer()
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  fontCache = btoa(binary)
+  return fontCache
+}
+
+async function exportToPdf(uniqueMeals: UniqueMeal[]) {
   const doc = new jsPDF()
 
+  // Register font that supports Polish characters
+  const fontBase64 = await loadRobotoFont()
+  doc.addFileToVFS('Roboto-Regular.ttf', fontBase64)
+  doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal')
+  doc.addFileToVFS('Roboto-Bold.ttf', fontBase64)
+  doc.addFont('Roboto-Bold.ttf', 'Roboto', 'bold')
+  doc.setFont('Roboto')
+
   doc.setFontSize(18)
-  doc.text('Lista posilkow', 14, 20)
+  doc.text('Lista posiłków', 14, 20)
 
   doc.setFontSize(10)
   doc.setTextColor(128, 128, 128)
@@ -178,11 +201,12 @@ function exportToPdf(uniqueMeals: UniqueMeal[]) {
 
   autoTable(doc, {
     startY: 34,
-    head: [['#', 'Posilek', 'Ostatnio serwowany', 'Polubili', 'Nie polubili']],
+    head: [['#', 'Posiłek', 'Ostatnio serwowany', 'Polubili', 'Nie polubili']],
     body: tableData,
     styles: {
       fontSize: 9,
       cellPadding: 3,
+      font: 'Roboto',
     },
     headStyles: {
       fillColor: [238, 117, 26], // primary color #ee751a
@@ -272,9 +296,9 @@ export default function MealsListPage() {
     }
   }
 
-  const handleExportPdf = () => {
+  const handleExportPdf = async () => {
     if (filteredMeals.length === 0) return
-    exportToPdf(filteredMeals)
+    await exportToPdf(filteredMeals)
   }
 
   return (
